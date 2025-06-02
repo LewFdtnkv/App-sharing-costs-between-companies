@@ -75,16 +75,51 @@ export default function CardWindow({
   };
 
   const updateParticipant = (index, field, value) => {
+  if (field === 'amount') {
+    const newAmount = parseFloat(value.replace(',', '.')) || 0;
+    
+    const totalBefore = participants.reduce((sum, p, i) => {
+      return i === index ? sum : sum + (parseFloat(p.amount.replace(',', '.')) || 0);
+    }, 0);
+    
+    const ratio = totalBefore > 0 ? (parseFloat(amount.replace(',', '.')) - newAmount) / totalBefore : 1;
+    
+    const newParticipants = participants.map((p, i) => {
+      if (i === index) {
+        return { ...p, amount: formatMoney(newAmount) };
+      } else {
+        const oldAmount = parseFloat(p.amount.replace(',', '.')) || 0;
+        return { ...p, amount: formatMoney(oldAmount * ratio) };
+      }
+    });
+    
+    setParticipants(newParticipants);
+    setIsManualAmountEdit(true);
+  } else {
     const newParticipants = [...participants];
     newParticipants[index][field] = value;
     setParticipants(newParticipants);
-    setIsManualAmountEdit(false);
-  };
+  }
+};
 
   const handleAmountChange = (e) => {
-    setAmount(e.target.value);
-    setIsManualAmountEdit(true);
-  };
+  setAmount(e.target.value);
+  setIsManualAmountEdit(true);
+  
+  const newTotal = parseFloat(e.target.value.replace(',', '.')) || 0;
+  const oldTotal = participants.reduce((sum, p) => {
+    return sum + (parseFloat(p.amount.replace(',', '.')) || 0);
+  }, 0);
+  
+  if (oldTotal > 0) {
+    const ratio = newTotal / oldTotal;
+    const newParticipants = participants.map(p => ({
+      ...p,
+      amount: formatMoney((parseFloat(p.amount.replace(',', '.')) || 0) * ratio)
+    }));
+    setParticipants(newParticipants);
+  }
+};
 
   const handleCurrencyChange = (value) => {
     setCurrency(CURRENCIES.find(c => c.code === value));
@@ -108,12 +143,10 @@ export default function CardWindow({
     const numTotal = participants.length;
     const totalSharePerPerson = totalAmount / numTotal;
   
-    // Сумма, которую должны были заплатить неплательщики
     const unpaidTotal = participants
       .filter(p => !paidBy.includes(p.name))
       .reduce((sum, _) => sum + totalSharePerPerson, 0);
   
-    // Сколько каждый плательщик дополнительно вносит
     const extraPerPayer = unpaidTotal / numPaid;
   
     const newCard = {

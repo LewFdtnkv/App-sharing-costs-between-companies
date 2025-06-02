@@ -1,6 +1,5 @@
-import { div } from 'three/tsl';
 import Options from './Options'
-import { BarChartOutlined, CheckOutlined, DeleteOutlined, LeftOutlined } from '@ant-design/icons';
+import {CheckOutlined, LeftOutlined } from '@ant-design/icons';
 
 export default function ConfirmWindow({setMode, bills, borrowers, language}) {
   return (

@@ -264,6 +264,8 @@
   font-size: 0.875rem;
   justify-content: end;
   cursor: pointer;
+  width: fit-content;
+  margin-left: auto;
   font-family: 'Poppins', sans-serif;
 }
 

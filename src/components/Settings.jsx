@@ -135,7 +135,7 @@ export default function Settings({ email, setEmail, setMode, setLanguage, langua
           {language === 'English' ? 'Log out': 'Выйти'}
         </Button>
         
-        <Options language={language}/>
+        <Options language={language} setMode={setMode}/>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import PaymentWindow from './components/paymentWindow';
 import ConfirmWindow from './components/ConfirmWindow';
 import Settings from './components/Settings';
 import moment from 'moment';
+import Profile from './components/Profile';
 
 function App() {
   const [mode, setMode] = useState('login');
@@ -160,6 +161,9 @@ function App() {
           language={language}
           billIndex={billIndex}
         />
+      )}
+      {mode === 'profile'&&(
+        <Profile language={language} setMode={setMode}/>
       )}
     </>
   );

@@ -83,6 +83,39 @@ export default function PaymentWindow({
       .map(([name]) => name);
   };
 
+  // Новая функция для нормализации балансов
+  const getNormalizedBalances = () => {
+    const participantTotals = {};
+    let totalPositive = 0;
+    let totalNegative = 0;
+
+    // Сначала собираем все балансы
+    currentBill.cards?.forEach(card => {
+      card.participants?.forEach(participant => {
+        participantTotals[participant.name] = (participantTotals[participant.name] || 0) + participant.difference;
+      });
+    });
+
+    // Вычисляем общие суммы положительных и отрицательных балансов
+    Object.values(participantTotals).forEach(amount => {
+      if (amount > 0) totalPositive += amount;
+      else totalNegative += Math.abs(amount);
+    });
+
+    // Если есть расхождение, корректируем балансы пропорционально
+    if (Math.abs(totalPositive - totalNegative) > 0.01) {
+      const correctionFactor = totalNegative / totalPositive;
+      
+      Object.keys(participantTotals).forEach(name => {
+        if (participantTotals[name] > 0) {
+          participantTotals[name] = participantTotals[name] * correctionFactor;
+        }
+      });
+    }
+
+    return participantTotals;
+  };
+
   return (
     <div className="app-wrapper">
       <div className="app-container">
@@ -108,7 +141,7 @@ export default function PaymentWindow({
               <div key={`card-${i}`}>
                 {i !== 0 && <Divider style={{ color: '#f0f0f0', margin: 0 }} />}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 40px' }}>
-                  <div className="card-header" style={{ fontWeight: 'bold', margin: 0, display: "flex", flexDirection: 'column' }}>
+                  <div className="card-header" style={{ fontWeight: 'bold', margin: 0, display: "flex", flexDirection: 'column', alignItems: 'start' }}>
                     {card.name}
                     {card.paidBy?.length > 0 && (
                       <div style={{ color: '#666', fontSize: '14px' }}>
@@ -120,32 +153,13 @@ export default function PaymentWindow({
                     {card.amount} {currency}
                   </div>
                 </div>
-
-                {/* {card.participants?.map((participant, i) => (
-                  <div key={i} style={{ padding: '10px', borderTop: '1px solid #f0f0f0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                      <span>{participant.name}</span>
-                      <span>{formatCurrency(participant.shouldPay, currency)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{t("Paid", "Оплачено")}: {formatCurrency(participant.actuallyPaid, currency)}</span>
-                      <span>{t("Difference", "Разница")}: {formatCurrency(participant.difference, currency)}</span>
-                    </div>
-                  </div>
-                ))} */}
               </div>
             ))}
           </div>
 
           <div style={{ marginBottom: '20px' }}>
             {(() => {
-              const participantTotals = {};
-
-              currentBill.cards?.forEach(card => {
-                card.participants?.forEach(participant => {
-                  participantTotals[participant.name] = (participantTotals[participant.name] || 0) + participant.difference;
-                });
-              });
+              const participantTotals = getNormalizedBalances();
 
               return (
                 <div>
@@ -171,7 +185,7 @@ export default function PaymentWindow({
                         }}
                       >
                         {total >= 0 ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                             <span>{name}</span>
                             <span style={{
                               color: 'green',
@@ -184,7 +198,7 @@ export default function PaymentWindow({
                             </span>
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                             <span style={{
                               color: '#ff0000',
                               backgroundColor: '#EB43354D',
@@ -218,12 +232,12 @@ export default function PaymentWindow({
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                         {Object.entries(participantTotals)
                           .filter(([name, amount]) => name !== "Me" && amount > 0)
-                          .map(([name, amount], i) => (
-                            <div key={i} style={{ display: 'flex' }}>
-                              {i !== 0 ? ', ' : ''}{name}
+                          .map(([name], i) => (
+                            <div key={i} style={{ display: 'flex', margin: '0 5px' }}>
+                              {name}
                             </div>
                           ))}
                         <Button

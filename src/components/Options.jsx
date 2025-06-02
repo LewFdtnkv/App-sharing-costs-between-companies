@@ -38,7 +38,7 @@ export default function Options({ onClickPlus, onSave, onFinish, mode, setMode, 
         <span>{language === 'English' ? 'Options': 'Настройки'}</span>
       </button>
       
-      <button className="panel-button">
+      <button className="panel-button" onClick={()=>setMode('profile')}>
         <UserOutlined style={{ fontSize: '24px' }} />
         <span>{language === 'English' ? 'Profile': 'Профиль'}</span>
       </button>
