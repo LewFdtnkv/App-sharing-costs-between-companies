@@ -368,7 +368,7 @@ const handleGoToCard = async (bill) => {
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
         <BarChartOutlined
           style={{ marginRight: 8, cursor: 'pointer' }}
-          onClick={handleGoToCard(currentBill)}
+          onClick={()=>handleGoToCard(currentBill)}
         />
         <Input
           value={billName}
