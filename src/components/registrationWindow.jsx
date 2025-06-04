@@ -68,35 +68,39 @@ export default function RegistrationWindow({ setMode, language }) {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+  if (!validateForm()) return;
 
-    setIsSubmitting(true);
-    setErrors(prev => {
-      const { server, ...rest } = prev;
-      return rest;
+  setIsSubmitting(true);
+  setErrors(prev => {
+    const { server, ...rest } = prev;
+    return rest;
+  });
+
+  try {
+    const response = await fetch('http://localhost:8080/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
     });
 
-    try {
-      const response = await fetch('http://localhost:8080/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || 'Failed to register');
-      }
-
-      setMode('menuApp');
-
-    } catch (error) {
-      console.error('Registration error:', error);
-      setErrors(prev => ({ ...prev, server: error.message }));
-    } finally {
-      setIsSubmitting(false);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new Error(errorData?.message || 'Failed to register');
     }
-  };
+
+    const { token } = await response.json();
+    
+    localStorage.setItem('bearerToken', token);
+    
+    setMode('menuApp');
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    setErrors(prev => ({ ...prev, server: error.message }));
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const getStrengthColor = () => {
     switch (passwordStrength) {
