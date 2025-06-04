@@ -232,13 +232,12 @@ const handleGoToCard = async () => {
 
   try {
     const API_BASE = 'http://localhost:8080';
-    const participantsWithIds = [];
 
     const getCurrentUserId = () => {
       if (!token) return 0;
       try {
         const decoded = jwt_decode(token);
-        return decoded.uid  || 0;
+        return decoded.uid || 0;
       } catch {
         return 0;
       }
@@ -246,19 +245,26 @@ const handleGoToCard = async () => {
 
     const currentUserId = getCurrentUserId();
 
-    participantsWithIds.push({
+    const eventPayload = {
+      name: billName.trim(),
+      created_by: currentUserId,
+    };
+
+    const EventId = currentBill.eventId
+
+    const participantsWithIds = [{
       ...participants[0],
       id: currentUserId,
       name: language === 'Русский' ? 'Я' : 'Me'
-    });
+    }];
 
     for (let i = 1; i < participants.length; i++) {
       const participant = participants[i];
 
       if (participant.name.includes('@')) {
-        const response = await fetch(`${API_BASE}/users/get-by-email`, {
+        const response = await fetch(`${API_BASE}/${EventId}/participants`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
@@ -267,6 +273,17 @@ const handleGoToCard = async () => {
 
         if (response.ok) {
           const userData = await response.json();
+
+          // Добавление участника на сервере
+          await fetch(`${API_BASE}/events/${eventId}/participants`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ user_id: userData.uid }),
+          });
+
           participantsWithIds.push({
             ...participant,
             id: userData.uid,
@@ -291,12 +308,24 @@ const handleGoToCard = async () => {
       return;
     }
 
+    // Получение списка участников события с сервера
+    const serverParticipantsRes = await fetch(`${API_BASE}/events/${eventId}/participants`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` })
+      }
+    });
+
+    const serverParticipants = await serverParticipantsRes.json();
+
     const tempBill = {
       name: billName.trim(),
-      participants: participantsWithIds,
+      participants: serverParticipants,
       cards: currentBill?.cards || [],
       date,
       createdAt: moment().format('D MMMM YYYY'),
+      eventId: eventId
     };
 
     setCurrentBill(tempBill);
@@ -311,6 +340,7 @@ const handleGoToCard = async () => {
     );
   }
 };
+
 
   return (
     <div style={{
