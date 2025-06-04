@@ -4,7 +4,7 @@ import { BarChartOutlined, PlusOutlined, DeleteOutlined, CalendarOutlined, LeftO
 import moment from 'moment';
 import ru_RU from 'antd/es/locale/ru_RU';
 import Options from './Options';
-import jwt_decode from 'jwt-decode';
+import {jwtDecode} from 'jwt-decode';
 
 
 async function sendBillToServer(bill, token = null) {
@@ -21,7 +21,7 @@ async function sendBillToServer(bill, token = null) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` })
+        "Authorization": `Bearer ${token}` 
       },
       body: JSON.stringify(eventPayload),
     });
@@ -37,7 +37,7 @@ async function sendBillToServer(bill, token = null) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` })
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify(participantPayload),
       });
@@ -70,7 +70,7 @@ async function sendBillToServer(bill, token = null) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` })
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify(expensePayload),
       });
@@ -92,7 +92,7 @@ async function sendBillToServer(bill, token = null) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` })
+        "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify(paymentPayload),
     });
@@ -218,7 +218,7 @@ export default function FormWindow({
 
 
 
-const handleGoToCard = async () => {
+const handleGoToCard = async (bill) => {
   const token = localStorage.getItem('token');
 
   if (!billName.trim() || participants.length < 2) {
@@ -236,7 +236,7 @@ const handleGoToCard = async () => {
     const getCurrentUserId = () => {
       if (!token) return 0;
       try {
-        const decoded = jwt_decode(token);
+        const decoded = jwtDecode(token);
         return decoded.uid || 0;
       } catch {
         return 0;
@@ -250,7 +250,7 @@ const handleGoToCard = async () => {
       created_by: currentUserId,
     };
 
-    const EventId = currentBill.eventId
+    const eventId = bill.eventId
 
     const participantsWithIds = [{
       ...participants[0],
@@ -262,7 +262,7 @@ const handleGoToCard = async () => {
       const participant = participants[i];
 
       if (participant.name.includes('@')) {
-        const response = await fetch(`${API_BASE}/${EventId}/participants`, {
+        const response = await fetch(`${API_BASE}/events/${eventId}/participants`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -274,7 +274,6 @@ const handleGoToCard = async () => {
         if (response.ok) {
           const userData = await response.json();
 
-          // Добавление участника на сервере
           await fetch(`${API_BASE}/events/${eventId}/participants`, {
             method: 'POST',
             headers: {
@@ -313,7 +312,7 @@ const handleGoToCard = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` })
+        "Authorization": `Bearer ${token}`
       }
     });
 
@@ -369,7 +368,7 @@ const handleGoToCard = async () => {
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
         <BarChartOutlined
           style={{ marginRight: 8, cursor: 'pointer' }}
-          onClick={handleGoToCard}
+          onClick={handleGoToCard(currentBill)}
         />
         <Input
           value={billName}
