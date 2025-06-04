@@ -13,6 +13,87 @@ export default function PaymentWindow({
   setborrowers, 
   billIndex 
 }) {
+  async function updateBill(bill) {
+  console.log(bill)
+  try {
+    const API_BASE = 'http://localhost:8080';
+
+    const eventPayload = {
+      name: bill.name,
+      created_by: bill.participants[0]?.id || 0,
+    };
+
+    const eventRes = await fetch(`${API_BASE}/events`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventPayload),
+    });
+
+    if (!eventRes.ok) throw new Error('Failed to create event');
+
+    const eventData = await eventRes.json();
+    const eventId = eventData.id;
+
+    for (const participant of bill.participants) {
+      const participantPayload = { user_id: participant.id };
+      const participantRes = await fetch(`${API_BASE}/events/${eventId}/participants`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(participantPayload),
+      });
+      if (!participantRes.ok) throw new Error(`Failed to add participant ${participant.name}`);
+    }
+
+    for (const card of bill.cards) {
+      const amount = Number(card.amount) || 0;
+      const paidByUsers = bill.participants.filter(p => p.difference > 0);
+
+      if (paidByUsers.length === 0) continue;
+
+      const perPayerAmount = amount / paidByUsers.length;
+
+      for (const payer of paidByUsers) {
+        const expensePayload = {
+          title: card.name || 'Expense',
+          amount: perPayerAmount,
+          paid_by: payer.id,
+          paid_at: new Date(card.date || bill.date).toISOString(),
+        };
+
+        const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(expensePayload),
+        });
+
+        if (!expenseRes.ok) throw new Error(`Failed to add expense ${expensePayload.title}`);
+      }
+    }
+
+    const paymentPayload = bill.cards.flatMap(card => 
+      card.participants.map(participant => ({
+        name: participant.name,
+        shouldPay: participant.shouldPay,
+        actuallyPaid: participant.actuallyPaid,
+        difference: participant.difference,
+      }))
+    );
+
+    const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(paymentPayload),
+    });
+
+    if (!paymentRes.ok) throw new Error('Failed to create payments');
+
+    return { success: true, eventId };
+
+  } catch (err) {
+    console.error('Error in sendBillToServer:', err);
+    throw err;
+    } 
+  }
   const getMyBalance = () => {
     if (!currentBill.cards) return 0;
     return currentBill.cards.reduce((balance, card) => {
@@ -67,14 +148,14 @@ export default function PaymentWindow({
       
       return card;
     });
-
     const updatedBill = { ...currentBill, cards: updatedCards };
-
+    console.log(updatedBill)
     setBills(prevBills => {
       const newBills = [...prevBills];
       newBills[billIndex] = updatedBill;
       return newBills;
     });
+    updateBill(updatedBill)
   }
 
   const getCreditors = (totals) => {
@@ -83,26 +164,22 @@ export default function PaymentWindow({
       .map(([name]) => name);
   };
 
-  // Новая функция для нормализации балансов
   const getNormalizedBalances = () => {
     const participantTotals = {};
     let totalPositive = 0;
     let totalNegative = 0;
 
-    // Сначала собираем все балансы
     currentBill.cards?.forEach(card => {
       card.participants?.forEach(participant => {
         participantTotals[participant.name] = (participantTotals[participant.name] || 0) + participant.difference;
       });
     });
 
-    // Вычисляем общие суммы положительных и отрицательных балансов
     Object.values(participantTotals).forEach(amount => {
       if (amount > 0) totalPositive += amount;
       else totalNegative += Math.abs(amount);
     });
 
-    // Если есть расхождение, корректируем балансы пропорционально
     if (Math.abs(totalPositive - totalNegative) > 0.01) {
       const correctionFactor = totalNegative / totalPositive;
       

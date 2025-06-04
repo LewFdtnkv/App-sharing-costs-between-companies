@@ -6,6 +6,7 @@ import ru_RU from 'antd/es/locale/ru_RU';
 import Options from './Options';
 
 async function sendBillToServer(bill) {
+  console.log(bill)
   try {
     const API_BASE = 'http://localhost:8080';
 
@@ -70,7 +71,7 @@ async function sendBillToServer(bill) {
       }))
     );
 
-    const paymentRes = await fetch(`${API_BASE}/payments`, {
+    const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(paymentPayload),
@@ -308,7 +309,10 @@ export default function FormWindow({
 
       <Button
         type="primary"
-        onClick={handleCreateBill}
+        onClick={() => {
+          setMode('menuApp');
+          handleCreateBill();
+        }}       
         disabled={!billName.trim() || participants.length < 2}
         style={{ width: '100%', marginBottom: 16 }}
       >
