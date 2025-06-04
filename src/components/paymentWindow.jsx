@@ -13,86 +13,66 @@ export default function PaymentWindow({
   setborrowers, 
   billIndex 
 }) {
+  
   async function updateBill(bill) {
-  console.log(bill)
-  try {
-    const API_BASE = 'http://localhost:8080';
+    console.log('Updating bill expenses and payments:', bill);
 
-    const eventPayload = {
-      name: bill.name,
-      created_by: bill.participants[0]?.id || 0,
-    };
+    try {
+      const API_BASE = 'http://localhost:8080';
+      const eventId = bill.eventId;
 
-    const eventRes = await fetch(`${API_BASE}/events`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(eventPayload),
-    });
+      if (!eventId) throw new Error('Missing eventId in bill');
 
-    if (!eventRes.ok) throw new Error('Failed to create event');
+      for (const card of bill.cards) {
+        const amount = Number(card.amount) || 0;
+        const paidByUsers = bill.participants.filter(p => p.difference > 0);
+        if (paidByUsers.length === 0) continue;
 
-    const eventData = await eventRes.json();
-    const eventId = eventData.id;
+        const perPayerAmount = amount / paidByUsers.length;
 
-    for (const participant of bill.participants) {
-      const participantPayload = { user_id: participant.id };
-      const participantRes = await fetch(`${API_BASE}/events/${eventId}/participants`, {
+        for (const payer of paidByUsers) {
+          const expensePayload = {
+            title: card.name || 'Expense',
+            amount: perPayerAmount,
+            paid_by: payer.id,
+            paid_at: new Date(card.date || bill.date).toISOString(),
+          };
+
+          const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(expensePayload),
+          });
+
+          if (!expenseRes.ok) {
+            throw new Error(`Failed to update expense ${expensePayload.title}`);
+          }
+        }
+      }
+
+      const paymentPayload = bill.cards.flatMap(card =>
+        card.participants.map(participant => ({
+          name: participant.name,
+          shouldPay: participant.shouldPay,
+          actuallyPaid: participant.actuallyPaid,
+          difference: participant.difference,
+        }))
+      );
+
+      const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(participantPayload),
+        body: JSON.stringify(paymentPayload),
       });
-      if (!participantRes.ok) throw new Error(`Failed to add participant ${participant.name}`);
+
+      if (!paymentRes.ok) throw new Error('Failed to update payments');
+
+      return { success: true, eventId };
+
+    } catch (err) {
+      console.error('Error updating bill expenses or payments:', err);
+      throw err;
     }
-
-    for (const card of bill.cards) {
-      const amount = Number(card.amount) || 0;
-      const paidByUsers = bill.participants.filter(p => p.difference > 0);
-
-      if (paidByUsers.length === 0) continue;
-
-      const perPayerAmount = amount / paidByUsers.length;
-
-      for (const payer of paidByUsers) {
-        const expensePayload = {
-          title: card.name || 'Expense',
-          amount: perPayerAmount,
-          paid_by: payer.id,
-          paid_at: new Date(card.date || bill.date).toISOString(),
-        };
-
-        const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(expensePayload),
-        });
-
-        if (!expenseRes.ok) throw new Error(`Failed to add expense ${expensePayload.title}`);
-      }
-    }
-
-    const paymentPayload = bill.cards.flatMap(card => 
-      card.participants.map(participant => ({
-        name: participant.name,
-        shouldPay: participant.shouldPay,
-        actuallyPaid: participant.actuallyPaid,
-        difference: participant.difference,
-      }))
-    );
-
-    const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(paymentPayload),
-    });
-
-    if (!paymentRes.ok) throw new Error('Failed to create payments');
-
-    return { success: true, eventId };
-
-  } catch (err) {
-    console.error('Error in sendBillToServer:', err);
-    throw err;
-    } 
   }
   const getMyBalance = () => {
     if (!currentBill.cards) return 0;

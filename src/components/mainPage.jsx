@@ -34,17 +34,6 @@ export default function MainPage({ setMode, mode, email, setEmail, language }) {
     setServerError('');
   }, [password, confirmPassword, email, mode, language]);
 
-  const checkUserExists = async (emailToCheck) => {
-    try {
-      const response = await fetch(`http://localhost:8080/users`);
-      if (!response.ok) return false;
-      const users = await response.json();
-      return users.some(user => user.email === emailToCheck);
-    } catch (e) {
-      return false;
-    }
-  };
-
   const loginUser = async (emailToCheck, pass) => {
     try {
       const response = await fetch('http://localhost:8080/login', {
@@ -52,33 +41,53 @@ export default function MainPage({ setMode, mode, email, setEmail, language }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailToCheck, password: pass }),
       });
-      return response.ok;
+      const { token } = await response.json();
+    
+      localStorage.setItem('bearerToken', token);
+    
+      setMode('menuApp');
+      // return response.ok;
+
     } catch {
       return false;
     }
   };
 
-  const handleSubmit = async () => {
-    if (!isFormValid) return;
+const handleSubmit = async () => {
+  if (!isFormValid) return;
 
+  try {
     if (mode === 'login') {
-      const exists = await checkUserExists(email);
-      if (!exists) {
-        setServerError(language === 'English' ? 'User not found, please register.' : 'Пользователь не найден, пожалуйста зарегистрируйтесь.');
-        setMode('register');
-        return;
+      const loggedIn = await loginUser(email, password);
+      if (!loggedIn) {
+        setServerError(language === 'English' 
+          ? 'Invalid email or password' 
+          : 'Неверная почта или пароль');
+      }
+    } else if (mode === 'register') {
+      const response = await fetch('http://localhost:8080/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Registration failed');
       }
 
       const loggedIn = await loginUser(email, password);
-      if (loggedIn) {
-        setMode('menuApp');
-      } else {
-        setServerError(language === 'English' ? 'Wrong password, please try again.' : 'Неверный пароль, попробуйте еще раз.');
+      if (!loggedIn) {
+        throw new Error(language === 'English' 
+          ? 'Registration successful but login failed' 
+          : 'Регистрация успешна, но вход не удался');
       }
-    } else if (mode === 'register') {
-      setMode('menuApp');
     }
-  };
+  } catch (error) {
+    setServerError(error.message);
+  }
+};
+
 
   const getPasswordStrengthColor = () => {
     switch (passwordStrength) {
@@ -98,7 +107,6 @@ export default function MainPage({ setMode, mode, email, setEmail, language }) {
       : ['Очень слабый', 'Слабый', 'Средний', 'Сильный', 'Очень сильный'];
     return texts[passwordStrength] || '';
   };
-
   return (
     <div className="auth-container">
       <h1 className="app-logo">SplitTheBill</h1>
@@ -211,6 +219,7 @@ export default function MainPage({ setMode, mode, email, setEmail, language }) {
             {language === 'English' ? 'Continue with' : 'Продолжить с'} Google
           </Button>
           <Button icon={<FacebookOutlined />} block size="large" className="social-btn">
+
             {language === 'English' ? 'Continue with' : 'Продолжить с'} Facebook
           </Button>
         </div>

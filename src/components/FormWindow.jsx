@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Input, Divider, Button, message, ConfigProvider, DatePicker } from 'antd';
 import { BarChartOutlined, PlusOutlined, DeleteOutlined, CalendarOutlined, LeftOutlined } from '@ant-design/icons';
 import moment from 'moment';
 import ru_RU from 'antd/es/locale/ru_RU';
 import Options from './Options';
+import jwt_decode from 'jwt-decode';
 
-async function sendBillToServer(bill) {
-  console.log(bill)
+
+async function sendBillToServer(bill, token = null) {
+  console.log('Отправка счета на сервер:', bill);
   try {
     const API_BASE = 'http://localhost:8080';
 
@@ -17,52 +19,67 @@ async function sendBillToServer(bill) {
 
     const eventRes = await fetch(`${API_BASE}/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` })
+      },
       body: JSON.stringify(eventPayload),
     });
 
     if (!eventRes.ok) throw new Error('Failed to create event');
 
     const eventData = await eventRes.json();
-    const eventId = eventData.id;
+    const eventId = eventData.ID;
 
     for (const participant of bill.participants) {
       const participantPayload = { user_id: participant.id };
       const participantRes = await fetch(`${API_BASE}/events/${eventId}/participants`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` })
+        },
         body: JSON.stringify(participantPayload),
       });
-      if (!participantRes.ok) throw new Error(`Failed to add participant ${participant.name}`);
+
+      if (!participantRes.ok)
+        throw new Error(`Failed to add participant ${participant.name}`);
     }
 
     for (const card of bill.cards) {
-      const amount = Number(card.amount) || 0;
-      const paidByUsers = bill.participants.filter(p => p.difference > 0);
+      const totalAmount = Number(card.amount) || 0;
 
-      if (paidByUsers.length === 0) continue;
+      if (!card.participants || card.participants.length === 0 || totalAmount === 0) continue;
 
-      const perPayerAmount = amount / paidByUsers.length;
+      const payer = card.participants.find(p => Number(p.actuallyPaid) > 0) || bill.participants[0];
 
-      for (const payer of paidByUsers) {
-        const expensePayload = {
-          title: card.name || 'Expense',
-          amount: perPayerAmount,
-          paid_by: payer.id,
-          paid_at: new Date(card.date || bill.date).toISOString(),
-        };
+      const shares = card.participants.map(p => ({
+        user_id: p.id,
+        share_amount: Number(p.shouldPay) || 0
+      }));
 
-        const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(expensePayload),
-        });
+      const expensePayload = {
+        title: card.name || 'Expense',
+        amount: totalAmount,
+        paid_by: payer.id,
+        paid_at: new Date(card.date || bill.date).toISOString(),
+        shares
+      };
 
-        if (!expenseRes.ok) throw new Error(`Failed to add expense ${expensePayload.title}`);
-      }
+      const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` })
+        },
+        body: JSON.stringify(expensePayload),
+      });
+
+      if (!expenseRes.ok)
+        throw new Error(`Failed to add expense ${expensePayload.title}`);
     }
 
-    const paymentPayload = bill.cards.flatMap(card => 
+    const paymentPayload = bill.cards.flatMap(card =>
       card.participants.map(participant => ({
         name: participant.name,
         shouldPay: participant.shouldPay,
@@ -73,7 +90,10 @@ async function sendBillToServer(bill) {
 
     const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` })
+      },
       body: JSON.stringify(paymentPayload),
     });
 
@@ -82,10 +102,11 @@ async function sendBillToServer(bill) {
     return { success: true, eventId };
 
   } catch (err) {
-    console.error('Error in sendBillToServer:', err);
+    console.error('Ошибка в sendBillToServer:', err);
     throw err;
   }
 }
+
 
 
 
@@ -146,26 +167,131 @@ export default function FormWindow({
     setParticipants(newParticipants);
   };
 
-  const handleCreateBill = async () => {
-    if (!billName.trim()) {
-      message.warning(language === 'Русский' ? 'Введите название счета' : 'Please enter bill name');
+ const handleCreateBill = async () => {
+  const token = localStorage.getItem('token');
+
+  if (!billName.trim()) {
+    message.warning(language === 'Русский' ? 'Введите название счета' : 'Please enter bill name');
+    return;
+  }
+
+  if (participants.length < 2) {
+    message.warning(language === 'Русский' ? 'Добавьте хотя бы одного участника' : 'Add at least one more participant');
+    return;
+  }
+
+  const participantsWithIds = participants.map((p, index) => ({
+    ...p,
+    id: Number(p.id) || index + 1
+  }));
+
+  const newBill = {
+    name: billName.trim(),
+    participants: participantsWithIds,
+    cards: currentBill?.cards || [],
+    date,
+    createdAt: moment().format('D MMMM YYYY'),
+  };
+
+  const tempBills = [...bills.filter(b => b.name !== newBill.name), newBill];
+  setBills(tempBills);
+
+  const updatedNewBill = tempBills.find(b => b.name === newBill.name) || newBill;
+  setCurrentBill(updatedNewBill);
+
+  try {
+    await sendBillToServer(updatedNewBill, token);
+    if (result?.eventId) {
+      const updatedBillWithId = { ...updatedNewBill, eventId: result.eventId };
+      setBills([
+        ...bills.filter(b => b.name !== updatedBillWithId.name),
+        updatedBillWithId
+      ]);
+      setCurrentBill(updatedBillWithId);
+    }
+    message.success(language === 'Русский' ? 'Счет успешно создан!' : 'Bill created successfully!');
+    setMode('menuApp');
+  } catch (err) {
+    message.error(language === 'Русский' ? 'Ошибка при отправке на сервер' : 'Error sending data to server');
+  }
+};
+
+
+
+const handleGoToCard = async () => {
+  const token = localStorage.getItem('token');
+
+  if (!billName.trim() || participants.length < 2) {
+    message.warning(
+      language === 'Русский' 
+        ? 'Заполните название счета и добавьте участников' 
+        : 'Please fill bill name and add participants first'
+    );
+    return;
+  }
+
+  try {
+    const API_BASE = 'http://localhost:8080';
+    const participantsWithIds = [];
+
+    const getCurrentUserId = () => {
+      if (!token) return 0;
+      try {
+        const decoded = jwt_decode(token);
+        return decoded.uid  || 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const currentUserId = getCurrentUserId();
+
+    participantsWithIds.push({
+      ...participants[0],
+      id: currentUserId,
+      name: language === 'Русский' ? 'Я' : 'Me'
+    });
+
+    for (let i = 1; i < participants.length; i++) {
+      const participant = participants[i];
+
+      if (participant.name.includes('@')) {
+        const response = await fetch(`${API_BASE}/users/get-by-email`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ email: participant.name }),
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          participantsWithIds.push({
+            ...participant,
+            id: userData.uid,
+            email: participant.name
+          });
+        } else {
+          message.warning(
+            language === 'Русский'
+              ? `Не удалось найти пользователя ${participant.name}`
+              : `Failed to find user ${participant.name}`
+          );
+        }
+      }
+    }
+
+    if (participantsWithIds.length < 2) {
+      message.warning(
+        language === 'Русский'
+          ? 'Добавьте хотя бы одного участника с email'
+          : 'Add at least one participant with email'
+      );
       return;
     }
 
-    if (participants.length < 2) {
-      message.warning(language === 'Русский' ? 'Добавьте хотя бы одного участника' : 'Add at least one more participant');
-      return;
-    }
-
-    const billId = Math.floor(1000000000000 + Math.random() * 9000000000000);
-
-    const participantsWithIds = participants.map((p, index) => ({
-      ...p,
-      id: Number(`${billId}${index + 1}`),
-    }));
-
-    const newBill = {
-      id: billId,
+    const tempBill = {
       name: billName.trim(),
       participants: participantsWithIds,
       cards: currentBill?.cards || [],
@@ -173,43 +299,18 @@ export default function FormWindow({
       createdAt: moment().format('D MMMM YYYY'),
     };
 
-    const tempBills = [
-      ...bills.filter(b => b.name !== newBill.name),
-      newBill,
-    ];
-
-    const cleanedBills = removeGlobalDuplicateCards(tempBills);
-    setBills(cleanedBills);
-
-    const updatedNewBill = tempBills.find(b => b.name === newBill.name) || newBill;
-    setCurrentBill(updatedNewBill);
-
-    try {
-      await sendBillToServer(updatedNewBill);
-      message.success(language === 'Русский' ? 'Счет успешно создан!' : 'Bill created successfully!');
-      setMode('menuApp');
-    } catch (err) {
-      message.error(language === 'Русский' ? 'Ошибка при отправке на сервер' : 'Error sending data to server');
-    }
-  };
-
-  const handleGoToCard = () => {
-    if (!billName.trim() || participants.length < 2) {
-      message.warning(language === 'Русский' ? 'Заполните название счета и добавьте участников' : 'Please fill bill name and add participants first');
-      return;
-    }
-
-    const tempBill = {
-      name: billName.trim(),
-      participants: [...participants],
-      cards: currentBill?.cards || [],
-      date,
-      createdAt: moment().format('D MMMM YYYY'),
-    };
-
     setCurrentBill(tempBill);
     setMode('card');
-  };
+
+  } catch (err) {
+    console.error('Error in handleGoToCard:', err);
+    message.error(
+      language === 'Русский' 
+        ? 'Ошибка при обработке участников' 
+        : 'Error processing participants'
+    );
+  }
+};
 
   return (
     <div style={{
