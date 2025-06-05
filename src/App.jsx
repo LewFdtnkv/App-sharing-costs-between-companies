@@ -163,6 +163,7 @@ function App() {
           setborrowers={setborrowers}
           language={language}
           billIndex={billIndex}
+          email={email}
         />
       )}
       {mode === 'profile'&&(

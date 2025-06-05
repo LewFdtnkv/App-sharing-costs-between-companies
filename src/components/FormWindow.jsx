@@ -24,91 +24,123 @@ export default function FormWindow({
   email,
   setStep
 }) {
+  let bill = currentBill
+ async function sendBillToServer(bill, token, email) {
+  try {
+    if (!token) throw new Error("No token provided");
 
-  async function sendBillToServer(bill, token = null, email, setCurrentBill = () => {}) {
-    try {
-      if (!token) throw new Error("No token provided");
+    const API_BASE = 'http://localhost:8080';
+    const decodedToken = jwtDecode(token);
 
-      const API_BASE = 'http://localhost:8080';
-      const decodedToken = jwtDecode(token);
+    const eventPayload = {
+      name: bill.name,
+      created_by: decodedToken.uid,
+    };
 
-      const eventPayload = {
-        name: bill.name,
-        created_by: decodedToken.uid,
-      };
+    // Создаём событие (event)
+    const eventRes = await fetch(`${API_BASE}/events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify(eventPayload),
+    });
 
-      const eventRes = await fetch(`${API_BASE}/events`, {
+    if (!eventRes.ok) throw new Error('Failed to create event');
+    const eventData = await eventRes.json();
+    const eventId = eventData.ID;
+
+    // Получаем и обновляем id участников (user_id)
+    const updatedParticipants = [];
+    for (const participant of bill.participants) {
+      let emailToUse = participant.name === 'Me' || participant.name === 'Я' ? email : participant.name;
+
+      // Получаем участника по email
+      const participantRes = await fetch(`${API_BASE}/user?email=${emailToUse}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          "Authorization": `Bearer ${token}`
+        },
+      });
+
+      if (!participantRes.ok) {
+        throw new Error(`Failed to get participant ${emailToUse}`);
+      }
+
+      const participantData = await participantRes.json();
+
+      // Записываем id участника в новый объект (чтобы не мутировать оригинал)
+      updatedParticipants.push({
+        ...participant,
+        id: participantData.ID,
+      });
+    }
+
+    // Отправляем участников в событие
+    for (const participant of updatedParticipants) {
+      const participantResPost = await fetch(`${API_BASE}/events/${eventId}/participants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          "Authorization": `Bearer ${token}` 
+          "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify(eventPayload),
+        body: JSON.stringify({ email: participant.name === 'Me' || participant.name === 'Я' ? email : participant.name }),
       });
 
-      if (!eventRes.ok) throw new Error('Failed to create event');
-
-      const eventData = await eventRes.json();
-      const eventId = eventData.ID;
-
-      for (const participant of bill.participants) {
-        let emailToUse = participant.name === 'Me' || participant.name === 'Я' ? email : participant.name;
-        const participantRes = await fetch(`${API_BASE}/user?email=${emailToUse}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            "Authorization": `Bearer ${token}`
-          },
-        });
-
-        if (!participantRes.ok) {
-          throw new Error(`Failed to get participant ${emailToUse}`);
-        }
-
-        const participantData = await participantRes.json();
-        participant.id = participantData.ID;
+      if (!participantResPost.ok) {
+        throw new Error(`Failed to add participant ${participant.name} to event`);
       }
-
-      for (const card of bill.cards) {
-        const totalAmount = Number(card.amount) || 0;
-        if (!card.participants?.length || totalAmount === 0) continue;
-
-        const payer = card.participants.find(p => Number(p.actuallyPaid) > 0) || bill.participants[0];
-
-        const shares = card.participants.map(p => ({
-          user_id: p.id,
-          share_amount: Number(p.shouldPay) || 0
-        }));
-
-        const expensePayload = {
-          title: card.name || 'Expense',
-          amount: totalAmount,
-          paid_by: payer.id,
-          paid_at: new Date(card.date || bill.date).toISOString(),
-          shares
-        };
-
-        const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify(expensePayload),
-        });
-
-        if (!expenseRes.ok)
-          throw new Error(`Failed to add expense ${expensePayload.title}`);
-      }
-
-      bill.eventId = eventId;
-      setCurrentBill(bill);
-      return { eventId };
-    } catch (err) {
-      console.error('Ошибка в sendBillToServer:', err);
-      throw err;
     }
+
+    // Отправляем расходы (карточки)
+    for (const card of bill.cards) {
+      const totalAmount = Number(card.amount) || 0;
+      if (!card.participants?.length || totalAmount === 0) continue;
+
+      const payerEmail = card.paidBy?.[0]; // из карточки, где указана почта плательщика
+      const payer = updatedParticipants.find(p => p.name === payerEmail);   
+
+      const shares = card.participants.map(p => ({
+        user_id: p.id,
+        share_amount: Number(p.shouldPay) || 0
+      }));
+
+      const expensePayload = {
+        title: card.name || 'Expense',
+        amount: totalAmount,
+        paid_by: payer.id,
+        paid_at: new Date(card.date || bill.date).toISOString(),
+        shares
+      };
+
+      const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(expensePayload),
+      });
+
+      if (!expenseRes.ok)
+        throw new Error(`Failed to add expense ${expensePayload.title}`);
+    }
+
+    // Возвращаем обновлённый bill с eventId и обновлёнными участниками
+    return {
+      ...bill,
+      eventId,
+      participants: updatedParticipants
+    };
+
+  } catch (err) {
+    console.error('Ошибка в sendBillToServer:', err);
+    throw err;
   }
+}
+
 
   useEffect(() => {
     const defaultParticipant = [{ name: language === 'Русский' ? 'Я' : 'Me', amount: '0,00' }];
@@ -135,82 +167,69 @@ export default function FormWindow({
     setParticipants(newParticipants);
   };
 
-  const handleCreateBill = async () => {
-    if (!billName.trim()) {
-      message.warning(language === 'Русский' ? 'Введите название счета' : 'Please enter bill name');
+const handleCreateBill = async () => {
+  if (!billName.trim()) {
+    message.warning(language === 'Русский' ? 'Введите название счета' : 'Please enter bill name');
+    return;
+  }
+
+  if (participants.length < 2) {
+    message.warning(language === 'Русский' ? 'Добавьте хотя бы одного участника' : 'Add at least one more participant');
+    return;
+  }
+
+  // Создаём новый bill
+  const newBill = {
+    name: billName.trim(),
+    participants,  // participants с id будут обновлены в sendBillToServer
+    cards: currentBill?.cards || [],
+    date,
+    createdAt: moment().format('D MMMM YYYY'),
+  };
+
+  // Добавляем/обновляем bill в списке
+  const tempBills = [...bills.filter(b => b.name !== newBill.name), newBill];
+  setBills(tempBills);
+
+  // Устанавливаем currentBill локально (пока без eventId)
+  setCurrentBill(newBill);
+
+  try {
+    // Отправляем bill на сервер и получаем обновлённый bill с eventId и id участников
+    const updatedBillFromServer = await sendBillToServer(newBill, token, email);
+
+    // Обновляем bills и currentBill уже с eventId и правильными participant.id
+    setBills([...bills.filter(b => b.name !== updatedBillFromServer.name), updatedBillFromServer]);
+    setCurrentBill(updatedBillFromServer);
+
+    message.success(language === 'Русский' ? 'Счет успешно создан!' : 'Bill created successfully!');
+    setMode('menuApp');
+  } catch {
+    message.error(language === 'Русский' ? 'Ошибка при отправке на сервер' : 'Error sending data to server');
+  }
+};
+
+
+  const handleGoToCard = () => {
+    if (!billName.trim() || participants.length < 2) {
+      message.warning('Please fill bill name and add participants first');
+      message.warning(language === 'Русский' ? 'Заполните название счета и добавьте участников' : 'Please fill bill name and add participants first');
       return;
     }
+    console.log(billName, bills)
 
-    if (participants.length < 2) {
-      message.warning(language === 'Русский' ? 'Добавьте хотя бы одного участника' : 'Add at least one more participant');
-      return;
-    }
-
-    const participantsWithIds = participants.map((p, index) => ({
-      ...p,
-      id: Number(p.id) || index + 1
-    }));
-
-    const newBill = {
+    const tempBill = {
       name: billName.trim(),
-      participants: participantsWithIds,
+      participants: [...participants],
       cards: currentBill?.cards || [],
       date,
-      createdAt: moment().format('D MMMM YYYY'),
+      createdAt: moment().format('D MMMM YYYY')
     };
+    
 
-    const tempBills = [...bills.filter(b => b.name !== newBill.name), newBill];
-    setBills(tempBills);
-
-    const updatedBill = tempBills.find(b => b.name === newBill.name) || newBill;
-    setCurrentBill(updatedBill);
-
-    try {
-      const result = await sendBillToServer(updatedBill, token, email);
-      if (result?.eventId) {
-        const updatedBillWithId = { ...updatedBill, eventId: result.eventId };
-        setBills([...bills.filter(b => b.name !== updatedBill.name), updatedBillWithId]);
-        setCurrentBill(updatedBillWithId);
-      }
-      message.success(language === 'Русский' ? 'Счет успешно создан!' : 'Bill created successfully!');
-      setMode('menuApp');
-    } catch {
-      message.error(language === 'Русский' ? 'Ошибка при отправке на сервер' : 'Error sending data to server');
-    }
-  };
-
-  const handleGoToCard = async () => {
-    if (!currentBill) return;
-    let bill = currentBill;
-    setMode('card')
-    console.log(currentBill, bill)
-    if (!bill?.eventId) {
-      const tempBill = {
-        name: billName.trim(),
-        participants: participants.map((p, i) => ({
-          ...p,
-          id: p.id || i + 1,
-        })),
-        cards: bill.cards || [],
-        date,
-        createdAt: moment().format('D MMMM YYYY'),
-      };
-
-      try {
-        const result = await sendBillToServer(tempBill, token, email);
-        if (result?.eventId) {
-          bill = { ...tempBill, eventId: result.eventId };
-          setCurrentBill(bill);
-        } else {
-          return message.error(language === 'Русский' ? 'Не удалось создать событие' : 'Failed to create event');
-        }
-      } catch {
-        return message.error(language === 'Русский' ? 'Ошибка при создании события' : 'Error creating event');
-      }
-    }
-
-    // setStep('card');
-  };
+    setCurrentBill(tempBill);
+    setMode('card');
+  };;
 
 
 

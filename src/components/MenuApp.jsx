@@ -33,7 +33,7 @@ export default function MenuApp({
       if (!bill.cards) return;
 
       bill.cards.forEach(card => {
-        const myPart = card.participants?.find(p => p.name === 'Me');
+        const myPart = card.participants?.find(p => p.name === 'Me' || p.name === 'Я' || p.name === email);
         if (!myPart) return;
 
         if (myPart.difference > 0) {
@@ -64,11 +64,15 @@ export default function MenuApp({
       currency: ''
     };
 
-    const totalAmount = parseFloat(bill.cards.reduce((sum, card) => sum + card.amount, 0).toFixed(2));
-    const myBalance = parseFloat(bill.cards.reduce((sum, card) => {
-      const myPart = card.participants?.find(p => p.name === 'Me');
-      return sum + (myPart?.difference || 0);
-    }, 0).toFixed(2));
+const totalAmount = parseFloat(bill.cards.reduce((sum, card) => sum + Number(card.amount || 0), 0).toFixed(2));
+    const myNames = ['Me', 'Я', email];
+    const myBalance = parseFloat(
+      bill.cards.reduce((sum, card) => {
+        const myPart = card.participants?.find(p => myNames.includes(p.name));
+        const diff = myPart && myPart.difference !== undefined ? Number(myPart.difference) : 0;
+        return sum + diff;
+      }, 0).toFixed(2)
+    );
     
     const currency = bill.cards[0]?.currency || '';
 
@@ -165,7 +169,7 @@ export default function MenuApp({
                         ?.filter(p => p.name !== 'Me')
                         .map((p, i) => (
                           <div key={i} className="participant-row">
-                            <span className="participant-name">{p.name}</span>
+                            <span className="participant-name">{p.name.split('@')[0]}</span>
                           </div>
                         ))}
                     </div>

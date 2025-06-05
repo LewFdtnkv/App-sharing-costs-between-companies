@@ -11,7 +11,8 @@ export default function PaymentWindow({
   currentBill, 
   language, 
   setborrowers, 
-  billIndex 
+  billIndex, 
+  email
 }) {
   
   async function updateBill(bill) {
@@ -59,15 +60,15 @@ export default function PaymentWindow({
         }))
       );
 
-      const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentPayload),
-      });
+      // const paymentRes = await fetch(`${API_BASE}/events/${eventId}/payments`, {
+      //   method: 'PATCH',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(paymentPayload),
+      // });
 
-      if (!paymentRes.ok) throw new Error('Failed to update payments');
+      // if (!paymentRes.ok) throw new Error('Failed to update payments');
 
-      return { success: true, eventId };
+      // return { success: true, eventId };
 
     } catch (err) {
       console.error('Error updating bill expenses or payments:', err);
@@ -76,11 +77,13 @@ export default function PaymentWindow({
   }
   const getMyBalance = () => {
     if (!currentBill.cards) return 0;
+
     return currentBill.cards.reduce((balance, card) => {
-      const myTransaction = card.participants?.find(p => p.name === 'Me');
+      const myTransaction = card.participants?.find(p => p.name === email); // <-- корректная проверка
       return balance + (myTransaction?.difference || 0);
     }, 0);
   };
+
 
   const formatCurrency = (value, currency) => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(2)} ${currency}`;
@@ -93,7 +96,7 @@ export default function PaymentWindow({
 
   function handleSubmitBill() {
     const updatedCards = currentBill.cards.map(card => {
-      const myParticipation = card.participants?.find(p => p.name === 'Me');
+      const myParticipation = card.participants?.find(p => p.name === email);
       
       if (myParticipation?.difference < 0) {
         const myDebt = Math.abs(myParticipation.difference);
@@ -102,7 +105,7 @@ export default function PaymentWindow({
         return {
           ...card,
           participants: card.participants?.map(p => {
-            if (p.name === 'Me') {
+            if (p.name === email) {
               return {
                 ...p,
                 difference: 0,
@@ -272,7 +275,7 @@ export default function PaymentWindow({
                     ))}
                   </ul>
 
-                  {participantTotals.Me !== undefined && participantTotals.Me < 0 && (
+                  {participantTotals[email] !== undefined && participantTotals[email] < 0  && (
                     <div style={{
                       display: 'flex',
                       textAlign: 'center',
@@ -285,7 +288,7 @@ export default function PaymentWindow({
                       <div style={{ display: 'flex', justifyContent: 'center' }}>
                         {t('I owe', 'Я должен/на')}
                         <div style={{ marginLeft: 8, color: "#1890ff" }}>
-                          {formatCurrency(participantTotals.Me, currency).split('-')[1].split(' ')[0]}
+                          {formatCurrency(participantTotals[email], currency).split('-')[1].split(' ')[0]}
                         </div>
                       </div>
 
