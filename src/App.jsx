@@ -91,11 +91,13 @@ function App() {
           setCurrentBill={setCurrentBill}
           setBillIndex={setBillIndex}
           language={language}
+          email={email}
         />
       )}
 
       {mode === 'card' && currentBill && (
         <CardWindow
+          email={email}
           currentBill={currentBill}
           setCurrentBill={setCurrentBill}
           setParticipants={setParticipants}
@@ -114,6 +116,7 @@ function App() {
 
       {mode === 'form' && (
         <FormWindow
+          email={email}
           bills={bills}
           setCurrentBill={setCurrentBill}
           setParticipants={setParticipants}

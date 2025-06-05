@@ -77,7 +77,7 @@ export default function RegistrationWindow({ setMode, language }) {
   });
 
   try {
-    const response = await fetch('http://localhost:8080/users', {
+    const response = await fetch('http://localhost:8080/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -92,7 +92,7 @@ export default function RegistrationWindow({ setMode, language }) {
     
     localStorage.setItem('bearerToken', token);
     
-    setMode('menuApp');
+    setMode('login');
 
   } catch (error) {
     console.error('Registration error:', error);

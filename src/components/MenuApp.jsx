@@ -22,7 +22,8 @@ export default function MenuApp({
   setDate,
   setCurrentBill,
   setBillIndex,
-  language
+  language, 
+  email
 }) {
   const calculateTotalBalance = () => {
     let totalOwedToMe = 0;
@@ -184,7 +185,7 @@ export default function MenuApp({
             const newBill = {
               name: '',
               date: moment().format('D MMMM YYYY'),
-              participants: [{ name: 'Me', amount: '0.00' }],
+              participants: [{ name: email, amount: '0.00' }],
               cards: []
             };
             setCurrentBill(newBill);
