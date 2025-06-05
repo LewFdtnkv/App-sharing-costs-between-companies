@@ -79,19 +79,21 @@ export default function FormWindow({
     }
 
     // Отправляем участников в событие
-    for (const participant of updatedParticipants) {
-      const participantResPost = await fetch(`${API_BASE}/events/${eventId}/participants`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ email: participant.name === 'Me' || participant.name === 'Я' ? email : participant.name }),
-      });
+    const participantsData = updatedParticipants.map(participant => ({
+      email: participant.name === 'Me' || participant.name === 'Я' ? email : participant.name
+    }));
 
-      if (!participantResPost.ok) {
-        throw new Error(`Failed to add participant ${participant.name} to event`);
-      }
+    const participantResPost = await fetch(`${API_BASE}/events/${eventId}/participants/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ participants: participantsData }),
+    });
+
+    if (!participantResPost.ok) {
+      throw new Error('Failed to add participants to event');
     }
 
     // Отправляем расходы (карточки)
