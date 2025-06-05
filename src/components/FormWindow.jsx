@@ -114,7 +114,7 @@ export default function FormWindow({
         amount: totalAmount,
         paid_by: payer.id,
         paid_at: new Date(card.date || bill.date).toISOString(),
-        shares
+        shares: shares
       };
 
       const expenseRes = await fetch(`${API_BASE}/events/${eventId}/expenses`, {
