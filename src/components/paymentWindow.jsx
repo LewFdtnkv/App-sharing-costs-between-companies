@@ -246,7 +246,7 @@ export default function PaymentWindow({
                       >
                         {total >= 0 ? (
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-                            <span>{name}</span>
+                            <span>{name.split('@')[0]}</span>
                             <span style={{
                               color: 'green',
                               backgroundColor: '#B4D9C1',
@@ -268,7 +268,7 @@ export default function PaymentWindow({
                             }}>
                               {formatCurrency(total, currency).split(' ')[0]}
                             </span>
-                            <span>{name}</span>
+                            <span>{name.split('@')[0]}</span>
                           </div>
                         )}
                       </li>
@@ -297,7 +297,7 @@ export default function PaymentWindow({
                           .filter(([name, amount]) => name !== "Me" && amount > 0)
                           .map(([name], i) => (
                             <div key={i} style={{ display: 'flex', margin: '0 5px' }}>
-                              {name}
+                              {name.split('@')[0]}
                             </div>
                           ))}
                         <Button
